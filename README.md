@@ -10,7 +10,7 @@
 
 ## About
 
-Service which can be run on AWS Lambda to monitor and websites and a metric value of website status code is sent to AWS CloudWatch.
+Service which can be run on AWS Lambda to monitor and check websites and a metric value of website status code is sent to AWS CloudWatch.
 
 ## Prerequisite
 
