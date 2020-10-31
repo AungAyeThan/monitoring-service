@@ -6,6 +6,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"monitoring-service/utils"
 	"net/http"
+	"sync"
+	"time"
 )
 
 type lambdaService struct {
@@ -24,43 +26,77 @@ func NewLambdaService(srv *cloudwatch.CloudWatch) LambdaService{
 	}
 }
 
-func (service *lambdaService) StartService() {
+func (service *lambdaService) worker(input chan string, output chan string, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-	websiteUrls := []string {
-		"http://www.google.com",
-		"https://www.youtube.com",
-	}
-
-	for _, url := range websiteUrls {
+	var result string
+	for url := range input {
 		respCode, err := service.MonitorWebsite(url)
 		sendMetricErr := service.SendMetric(respCode, url)
 		if sendMetricErr != nil {
-			fmt.Println(sendMetricErr)
+			result = sendMetricErr.Error()
 		}
-		if respCode == http.StatusOK || respCode == http.StatusCreated {
-			fmt.Println("website", url , "is up")
-		} else {
-			if err != nil {
-				fmt.Println("website", url, "is down, reason :", err.Error())
-			} else {
-				fmt.Println("website", url, "is down due to unexpected error")
-			}
+		if err != nil {
+			result = fmt.Sprintf("connectivity error in %s, reason : %s", url, err.Error())
 		}
+		result = fmt.Sprintf("website name %s, status %d", url, respCode)
+
+		output <- result
 	}
 }
 
+func (service *lambdaService) StartService() {
+	//add url that you would like to check
+	//make sure to add http scheme otherwise it will return error
+	startTIme := time.Now()
+	websiteUrls := []string {
+		"https://www.youtube.com",
+		"http://google.com",
+		"https://www.facebook.com",
+		"https://www.gmail.com",
+		"https://www.instagram.com",
+		"https://oway.com.mm",
+	}
+	var wg sync.WaitGroup
+
+	input := make(chan string, len(websiteUrls))
+	output := make(chan string, len(websiteUrls))
+	workers := utils.WorkerLimit
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go service.worker(input, output, &wg)
+	}
+
+	for _, job := range websiteUrls {
+		input <- job
+	}
+
+	close(input)
+	wg.Wait()
+	close(output)
+
+	// Read from output channel
+	for result := range output {
+		fmt.Println(result)
+	}
+
+	endTime := time.Since(startTIme)
+	fmt.Println("time taken", endTime)
+}
+
 func (service *lambdaService) MonitorWebsite(url string) (int, error) {
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		} }
 
-	request, requestErr := http.Get(url)
-	if request == nil {
-		return http.StatusInternalServerError, requestErr
+	resp, err := client.Get(url)
+	if err != nil {
+		return http.StatusInternalServerError, err
 	}
-	if requestErr != nil {
-		return request.StatusCode, requestErr
-	}
 
-	return request.StatusCode, nil
-
+	return resp.StatusCode, nil
 }
 
 func (service *lambdaService) SendMetric(respStatus int, url string) error {
@@ -79,13 +115,7 @@ func (service *lambdaService) SendMetric(respStatus int, url string) error {
 			},
 		},
 	})
-
-	if err != nil {
-		return err
-	}
-
-
-
+	return err
 }
 
 
