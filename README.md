@@ -10,7 +10,7 @@
 
 ## About
 
-Service which can be run on AWS Lambda to monitor and check websites and a metric value of website status code is sent to AWS CloudWatch.
+Mircoervice which can be run on AWS Lambda to monitor and check websites and metric value of website status code and response time taken per request is sent to AWS CloudWatch. Setup Alarm and SNS as per your preferences can also be done in AWS.
 
 ## Prerequisite
 
@@ -67,3 +67,48 @@ To run this project locally,
 $ go mod vendor
 $ go run main.go
 ```
+
+To setup in lambda, follow the below steps,
+
+1. Uncomment this line on main.go in line number 33.
+```
+lambda.Start(lambdaService.StartService)
+```
+
+2. Build the project with below command to create a zip file which is necessary to deploy on lambda
+
+```
+1. GOOS=linux go build -o main main.go
+2. zip monitor-service.zip main 
+```
+
+3. Setup the lambda function
+
+- Create a function as follow (with the policy defined under ([policy](#policy)) section) 
+
+![lambda-setup](https://github.com/AungAyeThan/monitoring-service/blob/assets/lambda-setup.png )
+
+- Add the zip file which is generated from earlier in the step 2.
+
+![lambda-deploy](https://github.com/AungAyeThan/monitoring-service/blob/assets/lambda-function.png )
+
+- Add the trigger using eventbridge, define the frequent time to trigger (eg every 5 min, 1 hour etc)
+
+![lambda-trigger](https://github.com/AungAyeThan/monitoring-service/blob/assets/lambda-service.png )
+
+- After that, check the metric log in cloudwatch, under metric section, you will see the metric sent from lambda
+
+![cloudwatch-metric](https://github.com/AungAyeThan/monitoring-service/blob/assets/metric.png )
+
+- here is the sample graph from cloudwatch metric
+
+![cloudwatch-metric-sample](https://github.com/AungAyeThan/monitoring-service/blob/assets/metric-sample.png )
+
+- Add the alarm as per your preferences. You may add SNS together with Alarm
+
+![alarm-setup](https://github.com/AungAyeThan/monitoring-service/blob/assets/alarm-metric.png )
+
+
+
+
+
