@@ -61,6 +61,15 @@ Find the basic preveliage policy for the lambda and cloudwatch metric
 
 ## Setup
 
+Add the request urls, eg website url, health-check apis or any other GET request in this section. You can add as many request as you like, it will be run in concurrent goroutine which means the process will complete as per the slowest request url in the section.
+```
+websiteUrls := []string {
+		"http://google.com",
+		"https://www.facebook.com",
+		"https://www.gmail.com",
+	}
+```
+
 To run this project locally, 
 
 ```
