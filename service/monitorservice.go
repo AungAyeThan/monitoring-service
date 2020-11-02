@@ -16,8 +16,8 @@ type lambdaService struct {
 
 type LambdaService interface {
 	StartService()
-	MonitorWebsite(url string) (int, error)
-	SendMetric(respStatus int, url string) error
+	MonitorWebsite(url string) (int, error, float64)
+	SendMetric(respStatus int, url string, timeTaken float64) error
 }
 
 func NewLambdaService(srv *cloudwatch.CloudWatch) LambdaService{
@@ -31,8 +31,8 @@ func (service *lambdaService) worker(input chan string, output chan string, wg *
 
 	var result string
 	for url := range input {
-		respCode, err := service.MonitorWebsite(url)
-		sendMetricErr := service.SendMetric(respCode, url)
+		respCode, err, timeTaken := service.MonitorWebsite(url)
+		sendMetricErr := service.SendMetric(respCode, url, timeTaken)
 		if sendMetricErr != nil {
 			result = sendMetricErr.Error()
 		}
@@ -48,14 +48,10 @@ func (service *lambdaService) worker(input chan string, output chan string, wg *
 func (service *lambdaService) StartService() {
 	//add url that you would like to check
 	//make sure to add http scheme otherwise it will return error
-	startTIme := time.Now()
 	websiteUrls := []string {
-		"https://www.youtube.com",
 		"http://google.com",
 		"https://www.facebook.com",
 		"https://www.gmail.com",
-		"https://www.instagram.com",
-		"https://oway.com.mm",
 	}
 	var wg sync.WaitGroup
 
@@ -80,28 +76,24 @@ func (service *lambdaService) StartService() {
 	for result := range output {
 		fmt.Println(result)
 	}
-
-	endTime := time.Since(startTIme)
-	fmt.Println("time taken", endTime)
 }
 
-func (service *lambdaService) MonitorWebsite(url string) (int, error) {
-	client := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		} }
+func (service *lambdaService) MonitorWebsite(url string) (int, error, float64) {
+	callStartTime := time.Now()
 
-	resp, err := client.Get(url)
+	resp, err := http.Get(url)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, err, 0
 	}
+	callEndTime := time.Since(callStartTime).Seconds()
+	fmt.Println("url - ", url, "call time taken -", callEndTime, "sec")
 
-	return resp.StatusCode, nil
+	return resp.StatusCode, nil, callEndTime
 }
 
-func (service *lambdaService) SendMetric(respStatus int, url string) error {
+func (service *lambdaService) SendMetric(respStatus int, url string, timeTaken float64) error {
 	_, err := service.cloudWatchSrv.PutMetricData(&cloudwatch.PutMetricDataInput{
-		Namespace: aws.String("Website Status"),
+		Namespace: aws.String(utils.MetricStatusNameSpace),
 		MetricData: []*cloudwatch.MetricDatum{
 			&cloudwatch.MetricDatum{
 				MetricName: aws.String(utils.MetricName),
@@ -110,6 +102,16 @@ func (service *lambdaService) SendMetric(respStatus int, url string) error {
 					&cloudwatch.Dimension{
 						Name:  aws.String(url),
 						Value: aws.String("Website Status code"),
+					},
+				},
+			},
+			&cloudwatch.MetricDatum{
+				MetricName: aws.String(utils.MetricDurationNameSpace),
+				Value:      aws.Float64(timeTaken),
+				Dimensions: []*cloudwatch.Dimension{
+					&cloudwatch.Dimension{
+						Name:  aws.String(url),
+						Value: aws.String("Response Time"),
 					},
 				},
 			},
